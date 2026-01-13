@@ -1,7 +1,6 @@
-// Pakwheels Used Cars Scraper - CheerioCrawler with stealth
+// Pakwheels Used Cars Scraper - CheerioCrawler with enhanced stealth
 import { Actor, log } from 'apify';
 import { CheerioCrawler, Dataset } from 'crawlee';
-import { gotScraping } from 'got-scraping';
 
 await Actor.init();
 
@@ -29,29 +28,49 @@ async function main() {
 
         /**
          * Build Pakwheels search URL from filters
+         * 
+         * PakWheels uses path-based URL format:
+         * /used-cars/search/-/ct_lahore/mk_toyota/md_corolla/pr_1000000_5000000/yr_2015_2020/
          */
         function buildSearchUrl() {
-            let path = '/used-cars';
+            // Base path for search
+            let pathParts = ['/used-cars/search/-'];
 
+            // Add city filter: ct_lahore
             if (city) {
-                path += `/${city.toLowerCase().trim()}`;
+                const citySlug = city.toLowerCase().trim().replace(/\s+/g, '-');
+                pathParts.push(`ct_${citySlug}`);
             }
 
+            // Add make filter: mk_toyota
             if (make) {
-                path += `/${make.toLowerCase().trim().replace(/\s+/g, '-')}`;
-                if (model) {
-                    path += `-${model.toLowerCase().trim().replace(/\s+/g, '-')}`;
-                }
+                const makeSlug = make.toLowerCase().trim().replace(/\s+/g, '-');
+                pathParts.push(`mk_${makeSlug}`);
             }
 
-            const url = new URL(`${path}/`, BASE_URL);
+            // Add model filter: md_corolla
+            if (model) {
+                const modelSlug = model.toLowerCase().trim().replace(/\s+/g, '-');
+                pathParts.push(`md_${modelSlug}`);
+            }
 
-            if (minPrice) url.searchParams.set('price_from', String(minPrice));
-            if (maxPrice) url.searchParams.set('price_to', String(maxPrice));
-            if (minYear) url.searchParams.set('year_from', String(minYear));
-            if (maxYear) url.searchParams.set('year_to', String(maxYear));
+            // Add price filter: pr_1000000_5000000 or pr_1000000_more
+            if (minPrice || maxPrice) {
+                const min = minPrice || '0';
+                const max = maxPrice || 'more';
+                pathParts.push(`pr_${min}_${max}`);
+            }
 
-            return url.href;
+            // Add year filter: yr_2015_2020
+            if (minYear || maxYear) {
+                const min = minYear || '1990';
+                const max = maxYear || new Date().getFullYear();
+                pathParts.push(`yr_${min}_${max}`);
+            }
+
+            // Build final URL with trailing slash
+            const finalPath = pathParts.join('/') + '/';
+            return `${BASE_URL}${finalPath}`;
         }
 
         /**
@@ -81,33 +100,47 @@ async function main() {
 
         /**
          * Extract car data from HTML (Priority 2 - Fallback)
+         * Updated selectors based on browser verification:
+         * - Card: li.classified-listing
+         * - Title: a.car-name
+         * - Price: .price-details
+         * - Specs: ul.ad-specs li
+         * - Location: ul.search-vehicle-info li
          */
         function extractFromHtml($, listing) {
             const $listing = $(listing);
 
-            const titleLink = $listing.find('a.car-name.ad-detail-path');
+            // Title and URL
+            const titleLink = $listing.find('a.car-name');
             const title = titleLink.text().trim() || null;
             const href = titleLink.attr('href') || null;
             const url = href ? new URL(href, BASE_URL).href : null;
 
+            // Price - extract from .price-details
             const priceText = $listing.find('.price-details').text().trim();
             const price = parsePrice(priceText);
 
-            const specs = $listing.find('ul.search-vehicle-info-2 li').map((_, el) => $(el).text().trim()).get();
+            // Vehicle specs from ul.ad-specs li (Year, Mileage, Fuel, Engine, Transmission)
+            const specs = $listing.find('ul.ad-specs li').map((_, el) => $(el).text().trim()).get();
             const year = specs[0] ? parseInt(specs[0], 10) : null;
             const mileage = specs[1] || null;
             const fuel_type = specs[2] || null;
             const engine_capacity = specs[3] || null;
             const transmission = specs[4] || null;
 
+            // Location from ul.search-vehicle-info li
             const location = $listing.find('ul.search-vehicle-info li').first().text().trim() || null;
 
-            const img = $listing.find('.img-box img');
-            const image_url = img.attr('data-original') || img.attr('src') || null;
+            // Image
+            const img = $listing.find('img');
+            const image_url = img.attr('data-original') || img.attr('data-src') || img.attr('src') || null;
 
-            const is_featured = $listing.hasClass('featured-listing') || $listing.find('.featured-label').length > 0;
+            // Featured status
+            const is_featured = $listing.hasClass('featured-listing') ||
+                $listing.find('.featured-label, .featured').length > 0;
 
-            const updated_at = $listing.find('.search-bottom .pull-right').text().trim() || null;
+            // Updated time
+            const updated_at = $listing.find('.search-bottom .pull-right, .updated-date').text().trim() || null;
 
             return {
                 title,
@@ -132,18 +165,25 @@ async function main() {
         function parsePrice(priceText) {
             if (!priceText) return null;
 
-            const cleaned = priceText.replace(/[^\d.,]/gi, '').replace(/,/g, '');
+            // Extract numbers
+            const numbers = priceText.match(/[\d.,]+/g);
+            if (!numbers) return null;
 
+            const cleaned = numbers[0].replace(/,/g, '');
+
+            // Check for lacs/lakhs (1 lac = 100,000)
             if (/lacs?|lakhs?/i.test(priceText)) {
                 const num = parseFloat(cleaned);
                 return isNaN(num) ? null : Math.round(num * 100000);
             }
 
+            // Check for crore (1 crore = 10,000,000)
             if (/crore/i.test(priceText)) {
                 const num = parseFloat(cleaned);
                 return isNaN(num) ? null : Math.round(num * 10000000);
             }
 
+            // Regular number
             const num = parseInt(cleaned, 10);
             return isNaN(num) ? null : num;
         }
@@ -161,16 +201,7 @@ async function main() {
             }
         }
 
-        /**
-         * Find next page URL
-         */
-        function findNextPage($, currentUrl, currentPage) {
-            const nextPage = currentPage + 1;
-            const url = new URL(currentUrl);
-            url.searchParams.set('page', String(nextPage));
-            return url.href;
-        }
-
+        // Determine start URL
         const initialUrl = startUrl || buildSearchUrl();
         log.info(`Starting scrape from: ${initialUrl}`);
 
@@ -189,38 +220,89 @@ async function main() {
             sessionPoolOptions: {
                 maxPoolSize: 20,
                 sessionOptions: {
-                    maxUsageCount: 10,
+                    maxUsageCount: 5,
                 },
             },
-            maxConcurrency: 3,
-            requestHandlerTimeoutSecs: 90,
-            navigationTimeoutSecs: 60,
+            maxConcurrency: 2,
+            requestHandlerTimeoutSecs: 120,
+            navigationTimeoutSecs: 90,
 
-            // Custom HTTP client with stealth headers
-            requestHandler: async ({ request, $, enqueueLinks, session }) => {
+            // Pre-navigation hook for stealth headers
+            preNavigationHooks: [
+                async ({ request }) => {
+                    request.headers = {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                        'Accept-Language': 'en-US,en;q=0.9',
+                        'Accept-Encoding': 'gzip, deflate, br',
+                        'Cache-Control': 'no-cache',
+                        'Sec-Ch-Ua': '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+                        'Sec-Ch-Ua-Mobile': '?0',
+                        'Sec-Ch-Ua-Platform': '"Windows"',
+                        'Sec-Fetch-Dest': 'document',
+                        'Sec-Fetch-Mode': 'navigate',
+                        'Sec-Fetch-Site': 'none',
+                        'Sec-Fetch-User': '?1',
+                        'Upgrade-Insecure-Requests': '1',
+                    };
+
+                    // Random delay between requests
+                    const delay = 2000 + Math.random() * 3000;
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                },
+            ],
+
+            async requestHandler({ request, $, enqueueLinks, session }) {
                 const pageNo = request.userData?.pageNo || 1;
 
-                const listings = $('li.classified-listing');
+                // Debug: Log page title and body length
+                const pageTitle = $('title').text();
+                const bodyLength = $('body').html()?.length || 0;
+                log.info(`Page ${pageNo}: Title="${pageTitle}", Body length=${bodyLength}`);
+
+                // Try multiple selectors for listings
+                let listings = $('li.classified-listing');
+
+                if (listings.length === 0) {
+                    // Try alternative selectors
+                    listings = $('[class*="classified"]').filter('li');
+                }
+
+                if (listings.length === 0) {
+                    // Try finding by car-name links
+                    listings = $('a.car-name').closest('li');
+                }
+
                 log.info(`Page ${pageNo}: Found ${listings.length} car listings`);
 
                 if (listings.length === 0) {
-                    // Check if we got blocked
-                    const bodyText = $('body').text().toLowerCase();
-                    if (bodyText.includes('captcha') || bodyText.includes('blocked') || bodyText.includes('access denied')) {
-                        log.warning('Detected blocking - marking session as bad');
+                    // Debug: Log some of the HTML to understand what we got
+                    const bodyText = $('body').text().substring(0, 500);
+                    log.warning(`No listings found. Page content preview: ${bodyText.substring(0, 200)}...`);
+
+                    // Check for blocking indicators
+                    if (bodyText.toLowerCase().includes('captcha') ||
+                        bodyText.toLowerCase().includes('blocked') ||
+                        bodyText.toLowerCase().includes('access denied') ||
+                        bodyText.toLowerCase().includes('robot')) {
+                        log.error('Page appears to be blocked');
                         session?.retire();
                         throw new Error('Blocked by website');
                     }
-                    log.warning('No listings found on page.');
                     return;
                 }
 
+                // Process each listing
                 for (let i = 0; i < listings.length && saved < RESULTS_WANTED; i++) {
                     const listing = listings[i];
 
+                    // Try JSON-LD first (Priority 1)
                     let carData = extractFromJsonLd($, listing);
+
+                    // Fallback to HTML parsing (Priority 2)
                     const htmlData = extractFromHtml($, listing);
 
+                    // Merge data - prefer JSON-LD values but use HTML for missing fields
                     const merged = {
                         title: carData?.title || htmlData.title,
                         url: htmlData.url,
@@ -237,53 +319,44 @@ async function main() {
                         updated_at: htmlData.updated_at,
                     };
 
+                    // Only save if we have essential data
                     if (merged.title && merged.url) {
                         results.push(merged);
                         saved++;
                     }
                 }
 
+                // Push data in batches
                 if (results.length >= 25 || saved >= RESULTS_WANTED) {
                     await Dataset.pushData(results.splice(0, results.length));
                     log.info(`Pushed batch. Total saved: ${saved}`);
                 }
 
+                // Pagination - find next page
                 if (saved < RESULTS_WANTED && pageNo < MAX_PAGES && listings.length > 0) {
-                    const nextUrl = findNextPage($, request.url, pageNo);
-                    await enqueueLinks({
-                        urls: [nextUrl],
-                        userData: { label: 'LIST', pageNo: pageNo + 1 },
-                    });
+                    // Check for next page link
+                    const nextLink = $('li.next_page a, a[rel="next"], .pagination .next a').attr('href');
+
+                    if (nextLink) {
+                        const nextUrl = new URL(nextLink, BASE_URL).href;
+                        log.info(`Enqueueing next page: ${nextUrl}`);
+                        await enqueueLinks({
+                            urls: [nextUrl],
+                            userData: { label: 'LIST', pageNo: pageNo + 1 },
+                        });
+                    } else {
+                        // Manual pagination
+                        const nextPage = pageNo + 1;
+                        const url = new URL(request.url);
+                        url.searchParams.set('page', String(nextPage));
+                        log.info(`Enqueueing next page (manual): ${url.href}`);
+                        await enqueueLinks({
+                            urls: [url.href],
+                            userData: { label: 'LIST', pageNo: nextPage },
+                        });
+                    }
                 }
             },
-
-            // Pre-navigation hook to add stealth headers
-            preNavigationHooks: [
-                async ({ request, session }) => {
-                    request.headers = {
-                        ...request.headers,
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-                        'Accept-Language': 'en-US,en;q=0.9',
-                        'Accept-Encoding': 'gzip, deflate, br',
-                        'Cache-Control': 'no-cache',
-                        'Pragma': 'no-cache',
-                        'Sec-Ch-Ua': '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
-                        'Sec-Ch-Ua-Mobile': '?0',
-                        'Sec-Ch-Ua-Platform': '"Windows"',
-                        'Sec-Fetch-Dest': 'document',
-                        'Sec-Fetch-Mode': 'navigate',
-                        'Sec-Fetch-Site': 'none',
-                        'Sec-Fetch-User': '?1',
-                        'Upgrade-Insecure-Requests': '1',
-                        'Referer': 'https://www.google.com/',
-                    };
-
-                    // Add random delay between requests
-                    const delay = 1000 + Math.random() * 2000;
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                },
-            ],
 
             async failedRequestHandler({ request, session }, error) {
                 log.error(`Request ${request.url} failed: ${error.message}`);
@@ -293,6 +366,7 @@ async function main() {
 
         await crawler.run([{ url: initialUrl, userData: { label: 'LIST', pageNo: 1 } }]);
 
+        // Push any remaining results
         if (results.length > 0) {
             await Dataset.pushData(results);
         }
