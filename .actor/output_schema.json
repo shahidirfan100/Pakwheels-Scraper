@@ -1,57 +1,11 @@
 {
-    "actorSpecification": 1,
-    "fields": {
-        "title": {
+    "actorOutputSchemaVersion": 1,
+    "title": "Output schema",
+    "properties": {
+        "overview": {
             "type": "string",
-            "description": "Car listing title with make, model, and year"
-        },
-        "url": {
-            "type": "string",
-            "description": "Direct URL to the car listing"
-        },
-        "price": {
-            "type": "integer",
-            "description": "Price in Pakistani Rupees (PKR)"
-        },
-        "currency": {
-            "type": "string",
-            "description": "Currency code (PKR)"
-        },
-        "year": {
-            "type": "integer",
-            "description": "Model year of the car"
-        },
-        "mileage": {
-            "type": "string",
-            "description": "Odometer reading (e.g., '45,000 km')"
-        },
-        "fuel_type": {
-            "type": "string",
-            "description": "Fuel type (Petrol, Diesel, Hybrid, CNG, Electric)"
-        },
-        "engine_capacity": {
-            "type": "string",
-            "description": "Engine displacement (e.g., '1800 cc')"
-        },
-        "transmission": {
-            "type": "string",
-            "description": "Transmission type (Automatic, Manual)"
-        },
-        "location": {
-            "type": "string",
-            "description": "City where the car is listed"
-        },
-        "image_url": {
-            "type": "string",
-            "description": "URL of the main listing image"
-        },
-        "is_featured": {
-            "type": "boolean",
-            "description": "Whether the listing is featured"
-        },
-        "updated_at": {
-            "type": "string",
-            "description": "When the listing was last updated"
+            "title": "Overview",
+            "template": "{{links.apiDefaultDatasetUrl}}/items?view=overview"
         }
     }
 }
