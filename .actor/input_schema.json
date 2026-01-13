@@ -1,0 +1,92 @@
+{
+  "title": "Pakwheels Used Cars Scraper",
+  "description": "Scrape used car listings from Pakwheels.com. Filter by city, make, model, price range, and year. Returns detailed car data including price, mileage, fuel type, and more.",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "startUrl": {
+      "title": "Start URL",
+      "type": "string",
+      "description": "Direct Pakwheels search URL. Overrides all other filters if provided.",
+      "editor": "textfield"
+    },
+    "city": {
+      "title": "City",
+      "type": "string",
+      "description": "Filter by city (e.g., Lahore, Karachi, Islamabad, Rawalpindi, Peshawar, Faisalabad, Multan).",
+      "editor": "textfield",
+      "prefill": "lahore"
+    },
+    "make": {
+      "title": "Car Make",
+      "type": "string",
+      "description": "Filter by car manufacturer (e.g., Toyota, Honda, Suzuki, Hyundai, KIA).",
+      "editor": "textfield"
+    },
+    "model": {
+      "title": "Car Model",
+      "type": "string",
+      "description": "Filter by specific model (e.g., Corolla, Civic, City, Cultus). Works best when Make is also specified.",
+      "editor": "textfield"
+    },
+    "minPrice": {
+      "title": "Minimum Price (PKR)",
+      "type": "integer",
+      "description": "Minimum price filter in Pakistani Rupees.",
+      "minimum": 0,
+      "editor": "number"
+    },
+    "maxPrice": {
+      "title": "Maximum Price (PKR)",
+      "type": "integer",
+      "description": "Maximum price filter in Pakistani Rupees.",
+      "minimum": 0,
+      "editor": "number"
+    },
+    "minYear": {
+      "title": "Minimum Year",
+      "type": "integer",
+      "description": "Minimum model year filter.",
+      "minimum": 1990,
+      "editor": "number"
+    },
+    "maxYear": {
+      "title": "Maximum Year",
+      "type": "integer",
+      "description": "Maximum model year filter.",
+      "editor": "number"
+    },
+    "results_wanted": {
+      "title": "Maximum Results",
+      "type": "integer",
+      "description": "Maximum number of car listings to collect.",
+      "minimum": 1,
+      "default": 100,
+      "prefill": 50,
+      "editor": "number"
+    },
+    "max_pages": {
+      "title": "Maximum Pages",
+      "type": "integer",
+      "description": "Maximum number of search result pages to scrape.",
+      "minimum": 1,
+      "default": 20,
+      "prefill": 5,
+      "editor": "number"
+    },
+    "proxyConfiguration": {
+      "title": "Proxy Configuration",
+      "type": "object",
+      "description": "Proxy settings for Apify platform.",
+      "editor": "proxy",
+      "default": {
+        "useApifyProxy": true,
+        "apifyProxyGroups": [
+          "RESIDENTIAL"
+        ]
+      }
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}

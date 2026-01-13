@@ -1,0 +1,53 @@
+{
+  "actorSpecification": 1,
+  "fields": {},
+  "views": {
+    "overview": {
+      "title": "Overview",
+      "transformation": {
+        "fields": [
+          "title",
+          "price",
+          "year",
+          "mileage",
+          "fuel_type",
+          "location",
+          "url"
+        ]
+      },
+      "display": {
+        "component": "table",
+        "properties": {
+          "title": {
+            "label": "Car Title",
+            "format": "text"
+          },
+          "price": {
+            "label": "Price (PKR)",
+            "format": "number"
+          },
+          "year": {
+            "label": "Year",
+            "format": "number"
+          },
+          "mileage": {
+            "label": "Mileage",
+            "format": "text"
+          },
+          "fuel_type": {
+            "label": "Fuel Type",
+            "format": "text"
+          },
+          "location": {
+            "label": "City",
+            "format": "text"
+          },
+          "url": {
+            "label": "Listing URL",
+            "format": "link"
+          }
+        }
+      }
+    }
+  }
+}
